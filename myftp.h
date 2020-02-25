@@ -1,4 +1,6 @@
-#define PAYLEN 1024
+#ifndef MYFTP_H
+#define MYFTP_H
+#define PAYLEN 1025
 struct message_s{
 	unsigned char protocol[5];
 	unsigned char type;
@@ -6,9 +8,7 @@ struct message_s{
 
 }__attribute__((packed));
 
-// struct all_data
-// {	struct message_s header;
-// 	// char * payload;
-// 	char payload[100];
-	
-// }__attribute__((packed));
+
+void tranp_file_data(int accept_fd, char filename[], char path[]);
+void recv_file_data(int fd, char filename[],char path[]);
+#endif MYFTP_H
