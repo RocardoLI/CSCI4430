@@ -61,7 +61,7 @@ void list_reply(int accept_fd){
 	header.protocol[3]='t';
 	header.protocol[4]='p';
 
-	header.length=(fn_len*PAYLEN+10);
+	header.length=(strlen(payload)+10);
 
 	header.length = htonl(header.length);
 
