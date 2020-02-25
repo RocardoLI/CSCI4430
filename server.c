@@ -13,7 +13,6 @@
 #include "myftp.h"
 
 void list_reply(int accept_fd){
-	struct message_s message_to_client;
 	char payload[PAYLEN];
 	memset(payload,0,PAYLEN);
 	int len;
@@ -59,6 +58,8 @@ void list_reply(int accept_fd){
 	header.protocol[4]='p';
 
 	header.length=(fn_len*PAYLEN+10);
+	header.length = htonl(header.length);
+
 	printf("header: %d\n",header.length);
 	memset(payload,0,PAYLEN);
 	// strcpy(message_to_client.payload,filelist);
@@ -93,6 +94,7 @@ void list_reply(int accept_fd){
 	printf("Done to send to client, len: %d\n",len);
 	// free(message_to_client.payload);
 }
+
 void tranp_file_data(int accept_fd, char filename[]){
 	// printf("can i reach here\n");
 	char filepath[40]="data/";
@@ -121,6 +123,8 @@ void tranp_file_data(int accept_fd, char filename[]){
 	header.protocol[4]='p';
 	header.type=0xFF;
 	header.length=filelength+10;
+
+	header.length = htonl(header.length);
 	printf("file length is %d\n",filelength );
 	close(file);
 
@@ -133,6 +137,9 @@ void tranp_file_data(int accept_fd, char filename[]){
 	 char character[2]="";
 	memset(payload,0,PAYLEN);
 	int if_finish=0;
+
+	header.length = ntohl(header.length);
+
 	for(int i=0;i<=(header.length-10-1)/sizeof(payload);i++){
 		for(int j=0;j<sizeof(payload)-1;j++){
 			memset(character,0,sizeof(character));
@@ -159,8 +166,8 @@ void tranp_file_data(int accept_fd, char filename[]){
 
 	}
 	close(file);
-
 }
+
 void reply_request_file(int accept_fd, struct message_s buf, char payload[]){
 	DIR * dir;
 	struct dirent * ptr;
@@ -185,10 +192,14 @@ void reply_request_file(int accept_fd, struct message_s buf, char payload[]){
 			break;
 		}
 	}
+
+	get_reply.length = htonl(get_reply.length);
+
 	if(f_exist==0){
 		get_reply.type=0xB3;
 		printf("cannot find the file\n");
 	}
+
 	if((len=(send(accept_fd,&get_reply,sizeof(get_reply),0)))<0){
 		perror("can not send request to client");
 	}
@@ -207,6 +218,9 @@ void recv_file_data(int fd, char filename[], char path[]){
 	if((len=recv(fd,&header,sizeof(header),0))<0){
 		perror("cannot recv the header from server\n");
 	}
+
+	header.length = ntohl(header.length);
+
 	 printf("length: %d\n",header.length);
 	if(header.type!=0xFF){
 		
@@ -238,6 +252,7 @@ void recv_file_data(int fd, char filename[], char path[]){
 	close(downfile);
 	printf("Done\n");
 }
+
 void put_recv_file(int accept_fd){
 	struct message_s header;
 	int len;
@@ -255,6 +270,9 @@ void put_recv_file(int accept_fd){
 	header.protocol[4]='p';
 	header.type=0xC2;
 	header.length=10;
+
+	header.length = htonl(header.length);
+
 	if((len=send(accept_fd,&header,sizeof(header),0))<0){
 		perror("cannot send header to client\n");
 	}
@@ -262,6 +280,7 @@ void put_recv_file(int accept_fd){
 	recv_file_data(accept_fd,filename,"data/");
 
 }
+
 void main_loop(unsigned short port){
 	int fd, accept_fd, count, client_count;
 	struct sockaddr_in addr, tmp_addr;
