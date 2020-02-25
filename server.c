@@ -9,8 +9,12 @@
 #include <netinet/in.h>	// "struct sockaddr_in"
 #include <arpa/inet.h>	// "in_addr_t"
 #include <dirent.h>
-#include <sys/malloc.h>
+#include <malloc.h>
+#include <pthread.h>
 #include "myftp.h"
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static int client_count = 0;
 
 void list_reply(int accept_fd){
 	char payload[PAYLEN];
@@ -58,7 +62,9 @@ void list_reply(int accept_fd){
 	header.protocol[4]='p';
 
 	header.length=(fn_len*PAYLEN+10);
+
 	header.length = htonl(header.length);
+
 
 	printf("header: %d\n",header.length);
 	memset(payload,0,PAYLEN);
@@ -74,7 +80,7 @@ void list_reply(int accept_fd){
 			printf("name: %s\n",payload);
 		}
 		else{
-			if((len=(send(accept_fd,&payload,sizeof(payload),0)))<0){
+			if((len=(send(accept_fd,payload,sizeof(payload),0)))<0){
 				perror("can not send the file name to client\n");
 			}
 			memset(payload,0,PAYLEN);
@@ -86,7 +92,7 @@ void list_reply(int accept_fd){
 		
 	}
 	if(fn_len==1){
-			if((len=(send(accept_fd,&payload,sizeof(payload),0)))<0){
+			if((len=(send(accept_fd,payload,sizeof(payload),0)))<0){
 				perror("can not send the file name to client\n");
 			}
 		}
@@ -95,78 +101,6 @@ void list_reply(int accept_fd){
 	// free(message_to_client.payload);
 }
 
-void tranp_file_data(int accept_fd, char filename[]){
-	// printf("can i reach here\n");
-	char filepath[40]="data/";
-		// 
-	strcat(filepath,filename);
-		// printf("can i reach here\n");
-	FILE * file=NULL;
-	// printf("can i reach here\n");
-	if((file=fopen(filepath,"rb"))<0){
-		perror("fail to open the file\n");
-	}
-	// printf("can i reach here\n");
-	int filelength=0;
-	char c;
-	while((int)(c=fgetc(file))>=0){
-		filelength+=1;
-		printf("char is %c\n",c);
-	}
-	struct message_s header;
-	int len;
-	 char payload[PAYLEN];
-	header.protocol[0]='m';
-	header.protocol[1]='y';
-	header.protocol[2]='f';
-	header.protocol[3]='t';
-	header.protocol[4]='p';
-	header.type=0xFF;
-	header.length=filelength+10;
-
-	header.length = htonl(header.length);
-	printf("file length is %d\n",filelength );
-	close(file);
-
-	if((file=fopen(filepath,"r"))<0){
-		perror("fail to open the file\n");
-	}
-	if((len=send(accept_fd,&header,sizeof(header),0))<0){
-		perror("cannot send header to client\n");
-	}
-	 char character[2]="";
-	memset(payload,0,PAYLEN);
-	int if_finish=0;
-
-	header.length = ntohl(header.length);
-
-	for(int i=0;i<=(header.length-10-1)/sizeof(payload);i++){
-		for(int j=0;j<sizeof(payload)-1;j++){
-			memset(character,0,sizeof(character));
-			if((int)(character[0]=fgetc(file))>=0){
-				// printf("can i reach here,%d %d %s\n",j,strlen(payload), character);
-				strcat(payload,character);
-				// printf("can i reach there,\n");
-			}
-			else{
-				if((len=send(accept_fd,payload,sizeof(payload),0))<0){
-					perror("can not send payload to client\n");
-				}
-				memset(payload,0,PAYLEN);
-				if_finish=1;
-				break;
-			}
-		}
-		if(if_finish!=0){
-			if((len=send(accept_fd,payload,sizeof(payload),0))<0){
-					perror("can not send payload to client\n");
-				}
-			}
-		memset(payload,0,PAYLEN);
-
-	}
-	close(file);
-}
 
 void reply_request_file(int accept_fd, struct message_s buf, char payload[]){
 	DIR * dir;
@@ -199,58 +133,14 @@ void reply_request_file(int accept_fd, struct message_s buf, char payload[]){
 		get_reply.type=0xB3;
 		printf("cannot find the file\n");
 	}
-
 	if((len=(send(accept_fd,&get_reply,sizeof(get_reply),0)))<0){
 		perror("can not send request to client");
 	}
 	if(f_exist==1){
-		tranp_file_data( accept_fd, payload);
+		char path[]="data/";
+		tranp_file_data( accept_fd, payload,path);
 	}
 	printf("Done to send to client\n"); 
-}
-// void send_file_data(int accept_fd, struct all_data buf){
-
-// }
-void recv_file_data(int fd, char filename[], char path[]){
-	int len;
-	struct message_s header;
-	 char payload[PAYLEN];
-	if((len=recv(fd,&header,sizeof(header),0))<0){
-		perror("cannot recv the header from server\n");
-	}
-
-	header.length = ntohl(header.length);
-
-	 printf("length: %d\n",header.length);
-	if(header.type!=0xFF){
-		
-		perror("type is wrong \n");
-
-	}
-	FILE * downfile=NULL;
-	char filepath[100]="";
-	strcat(filepath,path);
-	strcat(filepath,filename);
-	printf("cat the filename\n");
-	if((downfile=fopen(filepath,"wb"))==NULL){
-		printf("open file: %s\n",filepath);
-	}
-
-	for(int i=0; i<=(header.length-10-1)/sizeof(payload);i++){
-		if((len=recv(fd,payload,sizeof(payload),0))<0){
-			perror("can not recv the payload from server\n");
-		}
-		printf("receive %d %s \n",strlen(payload),payload);
-		if(fwrite(payload,strlen(payload),1, downfile)<0)
-		{
-			perror("can not write the payload into file\n");
-		}
-
-		memset(payload,0,PAYLEN);
-	}
-	fflush(downfile);
-	close(downfile);
-	printf("Done\n");
 }
 
 void put_recv_file(int accept_fd){
@@ -258,7 +148,7 @@ void put_recv_file(int accept_fd){
 	int len;
 	char payload[PAYLEN];
 	char filename[PAYLEN];
-	if((len=recv(accept_fd,&payload,sizeof(payload),0))<0){
+	if((len=recv(accept_fd,payload,sizeof(payload),0))<0){
 		perror("cannot send header to client\n");
 	}
 	strcpy(filename,payload);
@@ -281,12 +171,46 @@ void put_recv_file(int accept_fd){
 
 }
 
-void main_loop(unsigned short port){
-	int fd, accept_fd, count, client_count;
-	struct sockaddr_in addr, tmp_addr;
-	unsigned int addrlen= sizeof(struct sockaddr_in);
-	// struct all_data buf;
+void *pthread_loop(int* sDescriptor){
+	int accept_fd = (int)sDescriptor;
+	int len;
 	struct message_s buf;
+	 
+		if ((len = (recv(accept_fd,&buf,sizeof(buf),0)))<0){
+			perror("can not recv the commend");
+			pthread_mutex_lock(&mutex);
+				client_count--;
+			pthread_mutex_unlock(&mutex);
+		}
+		
+		if(buf.type==0xA1){
+			list_reply(accept_fd);
+		}
+		if(buf.type==0xB1){
+			unsigned char payload[PAYLEN];
+			if ((len=(recv(accept_fd,payload,sizeof(payload),0)))<0){
+				perror("can not recv the commend\n");
+				pthread_mutex_lock(&mutex);
+					client_count--;
+				pthread_mutex_unlock(&mutex);
+			}
+			reply_request_file( accept_fd, buf,payload);
+		}
+		if(buf.type==0xC1){
+			put_recv_file(accept_fd);
+		}
+		close(accept_fd);
+	pthread_mutex_lock(&mutex);
+		client_count--;
+	pthread_mutex_unlock(&mutex);
+	printf("%d\n",client_count);
+}
+
+void main_loop(unsigned short port){
+	int fd, accept_fd, count;
+	struct sockaddr_in addr;
+	struct sockaddr_in tmp_addr;
+	unsigned int addrlen= sizeof(struct sockaddr_in);
 	fd=socket(AF_INET, SOCK_STREAM,0);
 	if (fd==-1){
 		perror("socket()");
@@ -308,40 +232,26 @@ void main_loop(unsigned short port){
 		exit(1);
 	}
 	printf("[To stop the server: press Ctrl + C]\n");
-	client_count=0;
+	
+	pthread_t thr;
 	while(1){
-		int len;
-		if((accept_fd=accept(fd,(struct sockaddr *) &tmp_addr, &addrlen))==-1){
-			perror("accept()");
-			exit(1);
-
-		}
-		client_count++;
-		if ((len=(recv(accept_fd,&buf,sizeof(buf),0)))<0){
-			perror("can not recv the commend");
-		}
-		if(buf.type==0xA1){
-			list_reply(accept_fd);
-		}
-		// count=rev(accept_fd,&buf,sizeof(buf));
-		// if(count==-1){
-		// 	perror("read...");
-		// 	exit(1);
-
-		// }
-		if(buf.type==0xB1){
-			unsigned char payload[PAYLEN];
-			// printf("get command");
-			if ((len=(recv(accept_fd,&payload,sizeof(payload),0)))<0){
-				perror("can not recv the commend\n");
+		printf("%d\n",client_count);
+		if(client_count<11){
+			if((accept_fd=accept(fd,(struct sockaddr *) &tmp_addr, &addrlen))==-1){
+				perror("accept()");
+				exit(1);
 			}
-			reply_request_file( accept_fd, buf,payload);
+			pthread_mutex_lock(&mutex);
+				client_count++;
+			pthread_mutex_unlock(&mutex);
+			if(pthread_create(&thr, NULL, pthread_loop, accept_fd)!=0){
+				printf("fail to create thread\n");
+				close(accept_fd);
+				pthread_mutex_lock(&mutex);
+					client_count--;
+				pthread_mutex_unlock(&mutex);
+			}
 		}
-		if(buf.type==0xC1){
-			put_recv_file(accept_fd);
-		}
-		// printf("why\n");
-		close(accept_fd);
 	}
 }
 int main(int argc, char **argv){
