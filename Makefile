@@ -1,8 +1,14 @@
-CC=gcc
-CFLAGS=-Wall
-
-EXE=server client
-all: ${EXE}
+.PHONY:  client mserver
+mserver: mserver.o myftp.o client
+	gcc -o mserver mserver.o myftp.o
+mserver.o: mserver.c myftp.h 
+	gcc -c mserver.c 
+client: client.o myftp.o
+	gcc -o client client.o myftp.o
+client.o: client.c myftp.h
+	gcc -c client.c
+myftp.o: myftp.c myftp.h
+	gcc -c myftp.c
 
 clean:
-	rm -f ${EXE}
+	rm mserver client mserver.o client.o myftp.o
